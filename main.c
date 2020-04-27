@@ -53,10 +53,18 @@ char *make_grid_str(const struct grid *grid) {
 
 struct solve_state {
     u32 values[9][9];
+    
+    // box_values are the values in each box from top left to bottom right, reading order
+    // e.g. if box 4 (the center box) looks like { 1, 0, 3 }
+    //                                           { 4, 0, 2 }
+    //                                           { 0, 9, 0 }
+    // then box_values[4] = { true(1), true(2), true(3), true(4), false(5), false(6), false(7), false(8), true(9) }
+    bool box_values[9][9];
 };
 
 bool is_solved(const struct solve_state *solve_state) {
     assert(solve_state);
+    
     for (u32 row_idx = 0; row_idx < 9; row_idx++) {
         for (u32 col_idx = 0; col_idx < 9; col_idx++) {
             u32 cell_value = solve_state->values[row_idx][col_idx];
@@ -67,104 +75,38 @@ bool is_solved(const struct solve_state *solve_state) {
     return true;
 }
 
-
-
-// places the values of the box associated with cell [row_idx][col_idx] into the into arg
-// into must be large enough to hold 9 values
-void get_box_values(const struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 *into) {
+// populates the into arg with 9 bools about whether a particular value can be placed at [row_idx][col_idx]
+// e.g.: if into[3] is true, it is possible to place value 4 at [row_idx][col_idx]
+void get_possible_cell_values(const struct solve_state *solve_state, u32 row_idx, u32 col_idx, bool *into) {
     assert(solve_state);
     assert(row_idx >= 0);
     assert(row_idx < 9);
     assert(col_idx >= 0);
-    assert(col_idx < 9);
+    assert(row_idx < 9);
     
-    u32 box_start_row = row_idx / 3 * 3;
-    u32 box_start_col = col_idx / 3 * 3;
-    u32 box_end_row = box_start_row + 3;
-    u32 box_end_col = box_start_col + 3;
+    memset(into, true, 9 * sizeof(into[0]));
     
-    u32 box_values_idx = 0;
-    for (u32 row_idx = box_start_row; row_idx < box_end_row; row_idx++) {
-        for (u32 col_idx = box_start_col; col_idx < box_end_col; col_idx++) {
-            u32 value = solve_state->values[row_idx][col_idx];
-            into[box_values_idx] = value;
-            box_values_idx++;
-        }
+    u32 box_idx = (row_idx / 3) * 3 + col_idx / 3;
+    const bool *box_values = solve_state->box_values[box_idx];
+    for (u32 i = 0; i < 9; i++) {
+        bool have_value_in_box = box_values[i];
+        if (have_value_in_box)
+            into[i] = false;
     }
-}
-
-// places the values in the row row_idx into the into arg
-// into must be large enough to hold 9 values
-void get_row_values(const struct solve_state *solve_state, u32 row_idx, u32 *into) {
-    assert(solve_state);
-    assert(row_idx >= 0);
-    assert(row_idx < 9);
     
-    memcpy(into, &solve_state->values[row_idx][0], sizeof(into[0]) * 9);
-}
-
-// places the values in the col col_idx into the into arg
-// into must be large enough to hold 9 values
-void get_col_values(const struct solve_state *solve_state, u32 col_idx, u32 *into) {
-    assert(col_idx >= 0);
-    assert(col_idx < 9);
+    // look at the row that this cell is in
+    for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+        u32 val = solve_state->values[row_idx][col_idx];
+        if (val != 0)
+            into[val-1] = false;
+    }
     
-    u32 i = 0;
+    // look at the column that this cell is in
     for (u32 row_idx = 0; row_idx < 9; row_idx++) {
-        into[i++] = solve_state->values[row_idx][col_idx];
-    }
-}
-
-
-// places the possible values for the cell [row_idx, col_idx] into the in into arg
-// returns the number of possibilities that were placed into into
-u32 get_possible_cell_values(const struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 *into) {
-    assert(solve_state);
-    assert(row_idx >= 0);
-    assert(row_idx < 9);
-    assert(col_idx >= 0);
-    assert(row_idx < 9);
-    
-    u32 box_values[9];
-    get_box_values(solve_state, row_idx, col_idx, box_values);
-    
-    u32 row_values[9];
-    get_row_values(solve_state, row_idx, row_values);
-    
-    u32 col_values[9];
-    get_col_values(solve_state, col_idx, col_values);
-    
-    bool is_possible[9]; // index i indicates whether value i + 1 can be placed at the current cell
-    memset(is_possible, true, sizeof(is_possible[0]) * sizeof(is_possible));
-    
-    for (u32 i = 0; i < 9; i++) {
-        u32 val = box_values[i];
-        if (val != 0) {
-            is_possible[val-1] = false;
-        }
-    }
-    
-    for (u32 i = 0; i < 9; i++) {
-        u32 val = row_values[i];
+        u32 val = solve_state->values[row_idx][col_idx];
         if (val != 0)
-            is_possible[val-1] = false;
+            into[val-1] = false;
     }
-    
-    for (u32 i = 0; i < 9; i++) {
-        u32 val = col_values[i];
-        if (val != 0)
-            is_possible[val-1] = false;
-    }
-    
-    u32 possibilities_idx = 0;
-    for (u32 i = 0; i < 9; i++) {
-        if (is_possible[i]) {
-            into[possibilities_idx] = i + 1;
-            possibilities_idx++;
-        }
-    }
-    
-    return possibilities_idx;
 }
 
 
@@ -174,6 +116,42 @@ void move_to_next_cell(u32 *row_idx, u32 *col_idx) {
         *col_idx = 0;
         *row_idx += 1;
     }
+}
+
+// set value sets the solve_state grid's value at [row_idx][col_idx] to value
+// this function is used because there is bookeeping to do when setting a value
+void set_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 value) {
+    assert(solve_state);
+    assert(row_idx >= 0);
+    assert(row_idx < 9);
+    assert(col_idx >= 0);
+    assert(col_idx < 9);
+    assert(value >= 1);
+    assert(value <= 9);
+    assert(solve_state->values[row_idx][col_idx] == 0);
+    
+    solve_state->values[row_idx][col_idx] = value;
+    
+    u32 box_idx = (row_idx / 3) * 3 + col_idx / 3;
+    solve_state->box_values[box_idx][value-1] = true;
+}
+
+// unsets the value at [row_idx][col_idx] in the solve_state grid
+// this is used because there is bookeeping to do when a value is unset
+void unset_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx) {
+    assert(solve_state);
+    assert(row_idx >= 0);
+    assert(row_idx < 9);
+    assert(col_idx >= 0);
+    assert(col_idx < 9);
+    assert(solve_state->values[row_idx][col_idx] != 0);
+    
+    
+    u32 value_at_cell = solve_state->values[row_idx][col_idx];
+    solve_state->values[row_idx][col_idx] = 0;
+    
+    u32 box_idx = (row_idx / 3) * 3 + col_idx / 3;
+    solve_state->box_values[box_idx][value_at_cell-1] = false;
 }
 
 
@@ -191,7 +169,6 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
     u32 next_col_idx = col_idx;
     move_to_next_cell(&next_row_idx, &next_col_idx);
     
-    
     // if the current cell is already filled, that means it was filled in the initial state
     // don't do anything for it, just keep solving from the next cell
     // this can be repeated all the way to the end of the grid if the rest of the grid is solved
@@ -199,28 +176,27 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
         return recursive_solve(solve_state, next_row_idx, next_col_idx);
     }
     
-    u32 possible_cell_values[9];
-    u32 n_possible_values = get_possible_cell_values(solve_state, row_idx, col_idx, possible_cell_values);
+    bool possible_values[9];
+    get_possible_cell_values(solve_state, row_idx, col_idx, possible_values);
     
-    // if we hit a cell that has no possible values for it, the path we have taken cannot succeed
-    if (n_possible_values == 0)
-        return false;
-    
-    
-    for (u32 i = 0; i < n_possible_values; i++) {
-        u32 possible_value = possible_cell_values[i];
+    for (u32 i = 0; i < 9; i++) {
+        bool is_possible = possible_values[i];
+        if (!is_possible)
+            continue;
         
-        solve_state->values[row_idx][col_idx] = possible_value;
+        u32 value = i + 1;
+        
+        set_value(solve_state, row_idx, col_idx, value);
         bool success = recursive_solve(solve_state, next_row_idx, next_col_idx);
         
         if (success) {
             return true;
         } else {
-            solve_state->values[row_idx][col_idx] = 0;
+            unset_value(solve_state, row_idx, col_idx);
         }
     }
     
-    // if we hit this, the sudoku is unsolvable
+    // if we hit this, the path we have taken is unsolvable
     return false;
 }
 
@@ -237,6 +213,30 @@ struct grid *solve(const struct grid *initial_state) {
         assert(solved);
         memcpy(solved->values, initial_state->values, sizeof(solved->values[0][0]) * 81);
         return solved;
+    }
+    
+    memset(solve_state.box_values, false, 81 * sizeof(solve_state.box_values[0][0]));
+    
+    // populate initial box values
+    for (u32 box_row = 0; box_row < 3; box_row++) {
+        for (u32 box_col = 0; box_col < 3; box_col++) {
+            
+            u32 box_idx = box_row * 3 + box_col;
+            
+            u32 values_row_start = box_row * 3;
+            u32 values_row_end = values_row_start + 3;
+            u32 values_col_start = box_col * 3;
+            u32 values_col_end = values_col_start + 3;
+            
+            for (u32 values_row = values_row_start; values_row < values_row_end; values_row++) {
+                for (u32 values_col = values_col_start; values_col < values_col_end; values_col++) {
+                    u32 value = solve_state.values[values_row][values_col];
+                    if (value != 0)
+                        solve_state.box_values[box_idx][value-1] = true;
+                }
+            }
+            
+        }
     }
     
     bool success = recursive_solve(&solve_state, 0, 0);
@@ -280,21 +280,19 @@ int main(void) {
     
     
     memcpy(grid.values, medium_values, 81 * sizeof(grid.values[0][0]));
-  
-   
-    
-    clock_t start = clock();
+ 
+	clock_t start = clock();
 	for (u32 i = 0; i < 10000; i++) {
 		struct grid *solved = solve(&grid);
 		free(solved);
 	}
     clock_t end = clock();
+
     
     float duration = (float) (end - start) / CLOCKS_PER_SEC;
 	
 	
     printf("%f\n", duration);
- 
     
     return EXIT_SUCCESS;
 }
