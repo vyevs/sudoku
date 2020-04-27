@@ -279,7 +279,7 @@ int main(void) {
     };
     
     
-    memcpy(grid.values, easy_values, 81 * sizeof(grid.values[0][0]));
+    memcpy(grid.values, medium_values, 81 * sizeof(grid.values[0][0]));
     
     char *grid_str = make_grid_str(&grid);
     printf("%s\n\n\n", grid_str);
