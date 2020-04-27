@@ -200,6 +200,50 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
     return false;
 }
 
+void reveal_naked_singles(struct solve_state *solve_state) {
+    
+    
+    bool revealed_at_least_one;
+    
+    bool possible_values[9];
+    do {
+        revealed_at_least_one = false;
+        
+        for (u32 row_idx = 0; row_idx < 9; row_idx++) {
+            for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+                
+                if (solve_state->values[row_idx][col_idx] != 0)
+                    continue;
+                
+                get_possible_cell_values(solve_state, row_idx, col_idx, possible_values);
+                
+                u32 n_possible = 0;
+                for (u32 i = 0; i < 9; i++) {
+                    if(possible_values[i])
+                        n_possible++;
+                }
+                
+                if (n_possible != 1)
+                    continue;
+                
+                revealed_at_least_one = true;
+                
+                u32 single_val_idx;
+                for (u32 i = 0; i < 9; i++) {
+                    if (possible_values[i]) {
+                        single_val_idx = i;
+                        break;
+                    }
+                }
+                
+                u32 value = single_val_idx + 1;
+                
+                set_value(solve_state, row_idx, col_idx, value);
+            }
+        }
+        
+    } while (revealed_at_least_one);
+}
 
 struct grid *solve(const struct grid *initial_state) {
     assert(initial_state);
@@ -208,12 +252,8 @@ struct grid *solve(const struct grid *initial_state) {
     memcpy(solve_state.values, initial_state->values, sizeof(solve_state.values[0][0]) * 81);
     
     
-    if (is_solved(&solve_state)) {
-        struct grid *solved = malloc(sizeof(*solved));
-        assert(solved);
-        memcpy(solved->values, initial_state->values, sizeof(solved->values[0][0]) * 81);
-        return solved;
-    }
+    if (is_solved(&solve_state))
+        goto done;
     
     memset(solve_state.box_values, false, 81 * sizeof(solve_state.box_values[0][0]));
     
@@ -239,10 +279,17 @@ struct grid *solve(const struct grid *initial_state) {
         }
     }
     
+    
+    
+    reveal_naked_singles(&solve_state);
+    if (is_solved(&solve_state))
+        goto done;
+    
     bool success = recursive_solve(&solve_state, 0, 0);
     assert(success);
     
     
+    done:
     struct grid *solved = malloc(sizeof(*solved));
     assert(solved);
     memcpy(solved->values, solve_state.values, 81 * sizeof(solved->values[0][0]));
@@ -278,21 +325,36 @@ int main(void) {
         { 0, 2, 0, 6, 5, 0, 0, 0, 4 }
     };
     
+    u32 hard_values[9][9] = {
+        { 9, 0, 4, 0, 0, 0, 7, 0, 2 },
+        { 6, 0, 0, 0, 0, 0, 9, 5, 0 },
+        { 0, 3, 0, 0, 2, 0, 0, 0, 4 },
+        { 0 ,0, 6, 9, 0, 3, 0, 0, 0 },
+        { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        { 0 ,0, 0, 8, 0, 5, 1, 0, 0 },
+        { 7, 0, 0, 0, 9, 0, 0, 8, 0 },
+        { 0, 4, 5, 0, 0, 0, 0, 0, 9 },
+        { 3, 0, 1, 0, 0, 0, 5, 0, 6 }
+    };
     
-    memcpy(grid.values, medium_values, 81 * sizeof(grid.values[0][0]));
- 
-	clock_t start = clock();
-	for (u32 i = 0; i < 10000; i++) {
-		struct grid *solved = solve(&grid);
-		free(solved);
-	}
+    memcpy(grid.values, hard_values, 81 * sizeof(grid.values[0][0]));
+    
+    char *grid_str = make_grid_str(&grid);
+    printf("%s\n\n", grid_str);
+    
+    struct grid *solved;
+    
+    
+    clock_t start = clock();
+    for (u32 i = 0; i < 1; i++)
+        solved = solve(&grid);
     clock_t end = clock();
-
     
     float duration = (float) (end - start) / CLOCKS_PER_SEC;
-	
-	
     printf("%f\n", duration);
+    
+    grid_str = make_grid_str(solved);
+    printf("%s\n", grid_str);
     
     return EXIT_SUCCESS;
 }
