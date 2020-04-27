@@ -280,21 +280,17 @@ int main(void) {
     
     
     memcpy(grid.values, medium_values, 81 * sizeof(grid.values[0][0]));
-    
-    char *grid_str = make_grid_str(&grid);
-    printf("%s\n\n\n", grid_str);
-    
-    clock_t start = clock();
-    struct grid *solved = solve(&grid);
+ 
+	clock_t start = clock();
+	for (u32 i = 0; i < 10000; i++) {
+		struct grid *solved = solve(&grid);
+		free(solved);
+	}
     clock_t end = clock();
+
     
     float duration = (float) (end - start) / CLOCKS_PER_SEC;
     printf("%f\n", duration);
-    
-    
-    grid_str = make_grid_str(solved);
-    
-    printf("%s\n", grid_str);
     
     return EXIT_SUCCESS;
 }
