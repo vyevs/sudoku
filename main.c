@@ -160,6 +160,11 @@ struct solve_state {
     s32 collisions[9][9][9];
 };
 
+char *solve_state_str(const struct solve_state *solve_state) {
+    struct grid grid;
+    memcpy(grid.values, solve_state->values, 81 * sizeof(solve_state->values[0][0]));
+    return make_grid_str(&grid);
+}
 
 
 bool is_filled_out(const struct solve_state *solve_state) {
@@ -262,6 +267,8 @@ void set_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 va
     solve_state->values[row_idx][col_idx] = value;
     
     modify_related_cells_collisions(solve_state, row_idx, col_idx, value, true);
+    
+    //printf("set %"PRIu32" at %"PRIu32", %"PRIu32"\n", value, row_idx, col_idx);
 }
 
 // unsets the value at [row_idx][col_idx] in the solve_state grid
@@ -334,7 +341,7 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
 // fills out all the cells that can only have one possible value
 // does this repeatedly so that if filling out one cell allows a second to be filled
 // the second cell is filled as well, and so on
-void reveal_naked_singles(struct solve_state *solve_state) {
+void reveal_lone_singles(struct solve_state *solve_state) {
     bool revealed_at_least_one;
     do {
         revealed_at_least_one = false;
@@ -375,6 +382,87 @@ void reveal_naked_singles(struct solve_state *solve_state) {
         
     } while (revealed_at_least_one);
 }
+
+void reveal_hidden_singles(struct solve_state *solve_state) {
+    bool revealed_at_least_one;
+    
+    
+    do {
+        revealed_at_least_one = false;
+        
+        for (u32 row_idx = 0; row_idx < 9; row_idx++) {
+            
+            // number of cells in which a value can be placed in current row
+            u32 cells_possible[9];
+            memset(cells_possible, 0, 9 * sizeof(cells_possible[0]));
+            
+            for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+                if (solve_state->values[row_idx][col_idx] != 0)
+                    continue;
+                
+                u32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
+                for (u32 i = 0; i < 9; i++) {
+                    if (cur_cell_collisions[i] == 0)
+                        cells_possible[i]++;
+                }
+            }
+            
+            
+            // if the number of cells that a value can be placed in is 1, we found a hidden single
+            // and can place it in the single cell that
+            for (u32 i = 0; i < 9; i++) {
+                if (cells_possible[i] == 1) {
+                    revealed_at_least_one = true;
+                    u32 value = i + 1;
+                    
+                    // find the cell into which we will place the value
+                    for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+                        if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][i] == 0) {
+                            set_value(solve_state, row_idx, col_idx, value);
+                        }
+                    }
+                }
+            }
+            
+        }
+        
+        for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+            // number of cells in which a value can be placed in current row
+            u32 cells_possible[9];
+            memset(cells_possible, 0, 9 * sizeof(cells_possible[0]));
+            
+            for (u32 row_idx = 0; row_idx < 9; row_idx++) {
+                if (solve_state->values[row_idx][col_idx] != 0)
+                    continue;
+                
+                u32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
+                for (u32 i = 0; i < 9; i++) {
+                    if (cur_cell_collisions[i] == 0)
+                        cells_possible[i]++;
+                }
+            }
+            
+            
+            // if the number of cells that a value can be placed in is 1, we found a hidden single
+            // and can place it in the single cell that
+            for (u32 i = 0; i < 9; i++) {
+                if (cells_possible[i] == 1) {
+                    revealed_at_least_one = true;
+                    u32 value = i + 1;
+                    
+                    // find the cell into which we will place the value
+                    for (u32 row_idx = 0; row_idx < 9; row_idx++) {
+                        if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][i] == 0) {
+                            set_value(solve_state, row_idx, col_idx, value);
+                        }
+                    }
+                }
+            }
+            
+        }
+    } while (revealed_at_least_one);
+}
+
 
 struct grid *solve(const struct grid *initial_state) {
     assert(initial_state);
@@ -436,10 +524,30 @@ struct grid *solve(const struct grid *initial_state) {
     }
     
     
-    reveal_naked_singles(&solve_state);
-    if (is_filled_out(&solve_state)) {
-        goto done;
+    {
+        reveal_lone_singles(&solve_state);
+        if (is_filled_out(&solve_state))
+            goto done;
+        
+        char *grid_str = solve_state_str(&solve_state);
+        printf("state after lone singles pass: \n");
+        printf("%s\n\n", grid_str);
+        free(grid_str);
     }
+    
+    
+    {
+        reveal_hidden_singles(&solve_state);
+        if (is_filled_out(&solve_state)) {
+            printf("hidden singles solved it\n");
+            goto done;
+        }
+        char *grid_str = solve_state_str(&solve_state);
+        printf("state after hidden singles pass: \n");
+        printf("%s\n\n", grid_str);
+        free(grid_str);
+    }
+    
     
     bool success = recursive_solve(&solve_state, 0, 0);
     assert(success);
@@ -492,7 +600,7 @@ int main(void) {
     };
     
     struct grid grid;
-    memcpy(grid.values, medium_values, 81 * sizeof(grid.values[0][0]));
+    memcpy(grid.values, hard_values, 81 * sizeof(grid.values[0][0]));
     
     char *grid_str = make_grid_str(&grid);
     printf("%s\n\n", grid_str);
