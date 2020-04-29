@@ -1,7 +1,11 @@
 # sudoku
 simple sudoku solver based on backtracking
 
-only non-backtracking sudoku technique currently implemented is the reveal of naked & hidden singles
+current solving techniques implemented:
+
+1. lone singles
+2. hidden singles
+3. backtracking
 
 current initial state is set in the code
 
