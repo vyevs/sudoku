@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,12 +12,12 @@ struct grid {
     u32 values[9][9];
 };
 
-static char str_buf[4096];
+static char grid_str_buf[4096];
 
 char *make_grid_str(const struct grid *grid) {
     assert(grid);
     
-    char *to_print_to = str_buf;
+    char *to_print_to = grid_str_buf;
     
     for (u32 row_idx = 0; row_idx < 9; row_idx++) {
         for (u32 col_idx = 0; col_idx < 9; col_idx++) {
@@ -46,7 +47,7 @@ char *make_grid_str(const struct grid *grid) {
     
     to_print_to[0] = 0;
     
-    return str_buf;
+    return grid_str_buf;
 }
 
 
@@ -649,7 +650,10 @@ void parse_ss_format(const char *contents, struct grid *into) {
                 
                 col_idx++;
             }
-            row_idx++;
+
+            // skip all whitespace
+			while (isspace(*next_char))
+				next_char++;
         }
         
         // for newline char
@@ -696,62 +700,66 @@ u32 load_sdm_collection(const char *file_name, struct grid *into) {
     }
     
     char file_contents[65655];
-    fread(file_contents, 1, 65655, fp);
+    size_t n_read = fread(file_contents, 1, 65655, fp);
     fclose(fp);
-
+	file_contents[n_read] = 0;
 
 	char *next_char = file_contents;
 	
 	u32 line_num;
-	for (line_num = 0; ; line_num++) {
+	for (line_num = 0; *next_char; line_num++) {
 		struct grid *into_grid = &into[line_num];
 
 		for (u32 r = 0; r < 9; r++) {
 			for (u32 c = 0; c < 9; c++) {
 				char ch = *next_char;
 
-				if (ch == 0)
-					return line_num;
-
-				if (ch == '.')
+				if (ch == '.') {
 					into_grid->values[r][c] = 0;
-				else
+				} else if (ch >= '0' && ch <= '9') {
 					into_grid->values[r][c] = ch - '0';
+				} else {
+					printf("line %"PRIu32", col %"PRIu32": expected number but found '%c'\n", line_num+1, (r+1)*(c+1), ch);
+					exit(1);
+				}
 
 				next_char++;
 			}
 		}
-
-		next_char++; // for newline
+	
+		// skip all whitespace
+		while (isspace(*next_char))
+			next_char++;
 	}
 
 	return line_num;
 }
 
-void report_solved_or_not(const struct grid *grid) {
-	struct is_solved_result solved = is_solved(grid);
-	if (!solved.is_solved) {
-		printf("INCORRECT SOLUTION!!!\n");
+static char error_str_buf[4096];
+
+char *make_error_str(const struct is_solved_result solved) {
+	char *to_print_to = error_str_buf;
+
+	to_print_to += sprintf(to_print_to, "INCORRECT SOLUTION!!!\n");
 		
-		switch (solved.err_type) {
-			case ROW_ERROR: {
-				printf("row %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-			}
-			break;
-			
-			case COL_ERROR: {
-				printf("col %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-			}
-			break;
-			
-			case BOX_ERROR: {
-				printf("box %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-			}
-			break;
+	switch (solved.err_type) {
+		case ROW_ERROR: {
+			sprintf(to_print_to, "row %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
 		}
-	} else {
-		printf("LOOKS GOOD TO ME!\n");
+		break;
+		
+		case COL_ERROR: {
+			sprintf(to_print_to, "col %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+		}
+		break;
+		
+		case BOX_ERROR: {
+			sprintf(to_print_to, "box %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+		}
+		break;
 	}
+
+	return error_str_buf;
 }
 
 
@@ -764,21 +772,28 @@ int main(int argc, char *argv[]) {
     char *filename = argv[1];
 	size_t filename_len = strlen(filename);
 
-	clock_t start = clock();
+	clock_t start, end;
 	
 	if (strcmp(&filename[filename_len-4], ".sdm") == 0) {
-		struct grid initial_states[64];
+		struct grid initial_states[1024];
 		u32 n_grids = load_sdm_collection(filename, initial_states);
 		printf("read %"PRIu32" grids\n", n_grids);
 
+		start = clock();
 		for (u32 grid_idx = 0; grid_idx < n_grids; grid_idx++) {
 			struct grid *to_solve = &initial_states[grid_idx];
 			
 			struct grid solved;
 			solve(to_solve, &solved);
-			report_solved_or_not(&solved);
 			
+			struct is_solved_result solved_result = is_solved(&solved);
+			if (!solved_result.is_solved) {
+				char *error_str = make_error_str(solved_result);
+				printf("grid %"PRIu32": %s\n", grid_idx+1, error_str);
+				exit(1);
+			}
 		}
+		end = clock();
 
 	} else {
 		struct grid initial_state;
@@ -788,12 +803,13 @@ int main(int argc, char *argv[]) {
 		printf("initial state: \n%s\n\n", grid_str);
 		
 		struct grid solution;
+		start = clock();
 		solve(&initial_state, &solution);
-		report_solved_or_not(&solution);
+		end = clock();
+		
+		grid_str = make_grid_str(&solution);
+		printf("final state:\n%s\n\n", grid_str);
 	}
-
-    
-    clock_t end = clock();
   
 	float duration = (float) (end - start) / CLOCKS_PER_SEC;
     printf("that took %f seconds\n", duration);
