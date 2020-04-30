@@ -1,5 +1,7 @@
 # sudoku
-simple sudoku solver based on backtracking
+simple command line sudoku solver
+
+compile with gcc main.c or cl main.c
 
 current solving techniques implemented:
 
@@ -7,8 +9,8 @@ current solving techniques implemented:
 2. hidden singles
 3. backtracking
 
-current initial state is set in the code
+initial state is provided via a file that is the 1st arg to the program
 
 verifies the final solution and reports any errors
 
-does not do any dynamic allocations when solving the sudoku
+performs 0 dynamic allocations while solving the sudoku
