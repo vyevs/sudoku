@@ -9,7 +9,7 @@ current solving techniques implemented:
 2. hidden singles
 3. backtracking
 
-initial state is provided via a file that is the 1st arg to the program
+initial state is provided via a file that is the 1st arg to the program (.ss file format)
 
 verifies the final solution and reports any errors
 
