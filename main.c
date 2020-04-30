@@ -405,8 +405,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
         for (u32 row_idx = 0; row_idx < 9; row_idx++) {
             
             // number of cells in which a value can be placed in current row
-            u32 cells_possible[9];
-            memset(cells_possible, 0, 9 * sizeof(cells_possible[0]));
+            u32 cells_possible[9] = {0};
             
             for (u32 col_idx = 0; col_idx < 9; col_idx++) {
                 if (solve_state->values[row_idx][col_idx] != 0)
@@ -421,7 +420,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
             
             
             // if the number of cells that a value can be placed in is 1, we found a hidden single
-            // and can place it in the single cell that
+            // and can place it in the single cell for which the value is a candidate
             for (u32 i = 0; i < 9; i++) {
                 if (cells_possible[i] == 1) {
                     revealed_at_least_one_in_loop = true;
@@ -441,8 +440,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
         // pass over each of the columns
         for (u32 col_idx = 0; col_idx < 9; col_idx++) {
             // number of cells in which a value can be placed in current column
-            u32 cells_possible[9];
-            memset(cells_possible, 0, 9 * sizeof(cells_possible[0]));
+            u32 cells_possible[9] = {0};
             
             for (u32 row_idx = 0; row_idx < 9; row_idx++) {
                 if (solve_state->values[row_idx][col_idx] != 0)
@@ -457,7 +455,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
             
             
             // if the number of cells that a value can be placed in is 1, we found a hidden single
-            // and can place it in the single cell that
+            // and can place it in the single cell for which the value is a candidate
             for (u32 i = 0; i < 9; i++) {
                 if (cells_possible[i] == 1) {
                     revealed_at_least_one_in_loop = true;
@@ -482,8 +480,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
             for (u32 box_idx = 0; box_idx < 9; box_idx++) {
                 
                 // cells_possible[i] is number of cells in which value i+1 can be placed in this box
-                u32 cells_possible[9];
-                memset(cells_possible, 0, 9 * sizeof(cells_possible[0]));
+                u32 cells_possible[9] = {0};
                 
                 for (u32 row_idx = box_row_start; row_idx < box_row_end; row_idx++) {
                     for (u32 col_idx = box_col_start; col_idx < box_col_end; col_idx++) {
@@ -537,6 +534,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
     
     return revealed_at_least_one_overall;
 }
+
 
 void initialize_solve_state_collisions(struct solve_state *solve_state) {
     // our initial state is that all the values are possible for each cell (aka 0 collisions)
