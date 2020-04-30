@@ -5,7 +5,6 @@
 #include <string.h>
 #include <time.h>
 
-
 #include "types.h"
 
 struct grid {
@@ -630,73 +629,114 @@ struct grid *solve(const struct grid *initial_state) {
     
     bool success = recursive_solve(&solve_state, 0, 0);
     
-    done:
     struct grid *solved = malloc(sizeof(*solved));
     assert(solved);
     memcpy(solved->values, solve_state.values, 81 * sizeof(solved->values[0][0]));
     return solved;
 }
 
+// .ss file looks like
+// ...|85.|..7     line 0
+// 382|...|...          1
+// 9.7|.3.|184          2
+// -----------          3
+// .28|..6|.3.          4
+// 4.9|...|8.1          5
+// .3.|9..|47.          6
+// -----------          7
+// 713|.6.|2.8          8
+// ...|...|516          9
+// 2..|.98|...         10
+void parse_ss_format(const char *contents, struct grid *into) {
+    const char *next_char = contents;
+    
+    u32 row_idx = 0;
+    // .ss consists of 11 lines
+    for (u32 line_num = 0; line_num < 11; line_num++) {
+        if (line_num == 3 || line_num == 7) {
+            next_char += 11;
+            
+        } else {
+            u32 col_idx = 0;
+            for(u32 i=0;i<11;i++) {
+                char c = *next_char++;
+                if (c == '|') {
+                    continue;
+                }
+                if (c == '.') {
+                    into->values[row_idx][col_idx] = 0;
+                } else {
+                    into->values[row_idx][col_idx] = c - '0';
+                }
+                
+                col_idx++;
+            }
+            row_idx++;
+        }
+        
+        // for newline char
+        next_char++;
+    }
+}
+
+// populates into with the contents from sudoku file filename
+void load_grid_from_file(const char *file_name, struct grid *into) {
+    FILE *fp = fopen(file_name, "r");
+    if (fp == NULL) {
+        perror("fopen: ");
+        exit(1);
+    }
+    
+    
+    char file_contents[4096];
+    fread(file_contents, 1, 4096, fp);
+    fclose(fp);
+    
+    size_t file_name_len = strlen(file_name);
+    
+    if (strcmp(&file_name[file_name_len-3], ".ss") == 0) {
+        
+        printf("reading .ss format\n");
+        
+        parse_ss_format(file_contents, into);
+        
+        
+    } else {
+        printf("file format not supported\n");
+        exit(1);
+    }
+}
 
 
-int main(void) {
+int main(int argc, char *argv[]) {
+    if (argc != 2) {
+        fprintf(stderr, "please provide a file name that contains the sudoku\n");
+        exit(1);
+    }
     
-    u32 easy_values[9][9] = {
-        { 0, 0, 0, 8, 5, 0, 0, 0, 7 },
-        { 3, 8, 2, 0, 0, 0, 0, 0, 0 },
-        { 9, 0, 7, 0, 3, 0, 1, 8, 4 },
-        { 0, 2, 8, 0, 0, 6, 0, 3, 0 },
-        { 4, 0, 9, 0, 0, 0, 8, 0, 1 },
-        { 0, 3, 0, 9, 0, 0, 4, 7, 0 },
-        { 7, 1, 3, 0, 6, 0, 2, 0, 8 },
-        { 0, 0, 0, 0, 0, 0, 5, 1, 6 },
-        { 2, 0, 0, 0, 9, 8, 0, 0, 0 }
-    };
-    
-    u32 medium_values[9][9] = {
-        { 0, 0, 0, 0, 9, 0, 5, 0, 1 },
-        { 0, 0, 0, 0, 0, 0, 0, 2, 0 },
-        { 8, 3, 0, 0, 2, 0, 0, 0, 0 },
-        { 0, 0, 4, 0, 1, 6, 7, 5, 0 },
-        { 3, 0, 0, 0, 7, 5, 0, 1, 8 },
-        { 0, 5, 0, 0, 0, 0, 0, 9, 0 },
-        { 4, 1, 0, 0, 0, 0, 9, 0, 2 },
-        { 7, 0, 3, 0, 0, 0, 1, 0, 0 },
-        { 0, 2, 0, 6, 5, 0, 0, 0, 4 }
-    };
-    
-    u32 hard_values[9][9] = {
-        { 9, 0, 4, 0, 0, 0, 7, 0, 2 },
-        { 6, 0, 0, 0, 0, 0, 9, 5, 0 },
-        { 0, 3, 0, 0, 2, 0, 0, 0, 4 },
-        { 0 ,0, 6, 9, 0, 3, 0, 0, 0 },
-        { 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        { 0 ,0, 0, 8, 0, 5, 1, 0, 0 },
-        { 7, 0, 0, 0, 9, 0, 0, 8, 0 },
-        { 0, 4, 5, 0, 0, 0, 0, 0, 9 },
-        { 3, 0, 1, 0, 0, 0, 5, 0, 6 }
-    };
+    char *filename = argv[1];
     
     struct grid grid;
-    memcpy(grid.values, hard_values, 81 * sizeof(grid.values[0][0]));
+    load_grid_from_file(filename, &grid);
+    
     
     char *grid_str = make_grid_str(&grid);
     printf("initial state:\n%s\n\n", grid_str);
     
     struct grid *solution;
-    
-    
     clock_t start = clock();
     for (u32 i = 0; i < 1; i++) {
         solution = solve(&grid);
     }
     clock_t end = clock();
     
-    float duration = (float) (end - start) / CLOCKS_PER_SEC;
-    printf("%f\n", duration);
+    
     
     grid_str = make_grid_str(solution);
-    printf("%s\n", grid_str);
+    printf("%s\n\n", grid_str);
+    
+    float duration = (float) (end - start) / CLOCKS_PER_SEC;
+    printf("that took %f seconds\n", duration);
     
     {
         struct is_solved_result solved = is_solved(solution);
