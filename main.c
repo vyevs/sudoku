@@ -343,7 +343,6 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
 // the second cell is filled as well, and so on
 // returns whether at least one cell was filled out
 bool reveal_lone_singles(struct solve_state *solve_state) {
-    
     bool revealed_at_least_one_in_loop;
     bool revealed_at_least_one_overall = false;
     
@@ -587,7 +586,7 @@ void initialize_solve_state_collisions(struct solve_state *solve_state) {
 }
 
 
-struct grid *solve(const struct grid *initial_state) {
+void solve(const struct grid *initial_state, struct grid *into) {
     assert(initial_state);
     
     struct solve_state solve_state;
@@ -602,35 +601,16 @@ struct grid *solve(const struct grid *initial_state) {
             revealed_at_least_one = false;
             
             bool found_lone_singles = reveal_lone_singles(&solve_state);
-            if (found_lone_singles) {
-                char *grid_str = solve_state_str(&solve_state);
-                printf("state after lone singles pass: \n");
-                printf("%s\n\n", grid_str);
-            }
-            
+
             bool found_hidden_singles = reveal_hidden_singles(&solve_state);
-            if (found_hidden_singles) {
-                char *grid_str = solve_state_str(&solve_state);
-                printf("state after hidden singles pass: \n");
-                printf("%s\n\n", grid_str);
-            }
-            
+
             revealed_at_least_one |= found_lone_singles | found_hidden_singles;
         } while (revealed_at_least_one);
     }
     
-    
-    char *grid_str = solve_state_str(&solve_state);
-    printf("state after all passes: \n");
-    printf("%s\n\n", grid_str);
-    
-    
     bool success = recursive_solve(&solve_state, 0, 0);
     
-    struct grid *solved = malloc(sizeof(*solved));
-    assert(solved);
-    memcpy(solved->values, solve_state.values, 81 * sizeof(solved->values[0][0]));
-    return solved;
+    memcpy(into->values, solve_state.values, 81 * sizeof(into->values[0][0]));
 }
 
 // .ss file looks like
@@ -706,6 +686,75 @@ void load_grid_from_file(const char *file_name, struct grid *into) {
 }
 
 
+// grid must be large enough to hold as many puzzles as there are in the file
+// returns the number of puzzles read
+u32 load_sdm_collection(const char *file_name, struct grid *into) {
+	FILE *fp = fopen(file_name, "r");
+    if (fp == NULL) {
+        perror("fopen: ");
+        exit(1);
+    }
+    
+    char file_contents[65655];
+    fread(file_contents, 1, 65655, fp);
+    fclose(fp);
+
+
+	char *next_char = file_contents;
+	
+	u32 line_num;
+	for (line_num = 0; ; line_num++) {
+		struct grid *into_grid = &into[line_num];
+
+		for (u32 r = 0; r < 9; r++) {
+			for (u32 c = 0; c < 9; c++) {
+				char ch = *next_char;
+
+				if (ch == 0)
+					return line_num;
+
+				if (ch == '.')
+					into_grid->values[r][c] = 0;
+				else
+					into_grid->values[r][c] = ch - '0';
+
+				next_char++;
+			}
+		}
+
+		next_char++; // for newline
+	}
+
+	return line_num;
+}
+
+void report_solved_or_not(const struct grid *grid) {
+	struct is_solved_result solved = is_solved(grid);
+	if (!solved.is_solved) {
+		printf("INCORRECT SOLUTION!!!\n");
+		
+		switch (solved.err_type) {
+			case ROW_ERROR: {
+				printf("row %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			}
+			break;
+			
+			case COL_ERROR: {
+				printf("col %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			}
+			break;
+			
+			case BOX_ERROR: {
+				printf("box %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			}
+			break;
+		}
+	} else {
+		printf("LOOKS GOOD TO ME!\n");
+	}
+}
+
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fprintf(stderr, "please provide a file name that contains the sudoku\n");
@@ -713,54 +762,41 @@ int main(int argc, char *argv[]) {
     }
     
     char *filename = argv[1];
+	size_t filename_len = strlen(filename);
+
+	clock_t start = clock();
+	
+	if (strcmp(&filename[filename_len-4], ".sdm") == 0) {
+		struct grid initial_states[64];
+		u32 n_grids = load_sdm_collection(filename, initial_states);
+		printf("read %"PRIu32" grids\n", n_grids);
+
+		for (u32 grid_idx = 0; grid_idx < n_grids; grid_idx++) {
+			struct grid *to_solve = &initial_states[grid_idx];
+			
+			struct grid solved;
+			solve(to_solve, &solved);
+			report_solved_or_not(&solved);
+			
+		}
+
+	} else {
+		struct grid initial_state;
+		load_grid_from_file(filename, &initial_state);
+
+		char *grid_str = make_grid_str(&initial_state);
+		printf("initial state: \n%s\n\n", grid_str);
+		
+		struct grid solution;
+		solve(&initial_state, &solution);
+		report_solved_or_not(&solution);
+	}
+
     
-    struct grid grid;
-    load_grid_from_file(filename, &grid);
-    
-    
-    char *grid_str = make_grid_str(&grid);
-    printf("initial state:\n%s\n\n", grid_str);
-    
-    struct grid *solution;
-    clock_t start = clock();
-    for (u32 i = 0; i < 1; i++) {
-        solution = solve(&grid);
-    }
     clock_t end = clock();
-    
-    
-    
-    grid_str = make_grid_str(solution);
-    printf("%s\n\n", grid_str);
-    
-    float duration = (float) (end - start) / CLOCKS_PER_SEC;
+  
+	float duration = (float) (end - start) / CLOCKS_PER_SEC;
     printf("that took %f seconds\n", duration);
-    
-    {
-        struct is_solved_result solved = is_solved(solution);
-        if (!solved.is_solved) {
-            printf("INCORRECT SOLUTION!!!\n");
-            
-            switch (solved.err_type) {
-                case ROW_ERROR: {
-                    printf("row %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-                }
-                break;
-                
-                case COL_ERROR: {
-                    printf("col %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-                }
-                break;
-                
-                case BOX_ERROR: {
-                    printf("box %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
-                }
-                break;
-            }
-        } else {
-            printf("LOOKS GOOD TO ME!\n");
-        }
-    }
-    
+
     return EXIT_SUCCESS;
 }
