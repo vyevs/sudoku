@@ -527,6 +527,109 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
 }
 
 
+struct cell_with_2_candidates {
+	u32 row, col;
+	u32 candidates[2];
+};
+
+u32 find_all_cells_with_2_candidates(const struct solve_state *solve_state, struct cell_with_2_candidates *into) {
+	u32 candidate_counts[9][9] = {0};
+	
+	for (u32 r = 0; r < 9; r++)
+		for(u32 c = 0; c < 9; c++)
+			for (u32 i = 0; i < 9; i++)
+				if (solve_state->values[r][c] == 0 && solve_state->collisions[r][c][i] == 0)
+					candidate_counts[r][c]++;
+	
+	u32 n_cells = 0;
+	for (u32 r = 0; r < 9; r++) {
+		for (u32 c = 0; c < 9; c++) {
+			if (candidate_counts[r][c] == 2) {
+				struct cell_with_2_candidates cell;
+				cell.row = r;
+				cell.col = c;
+			
+				u32 candidate_idx = 0;
+				for (u32 i = 0; candidate_idx < 2; i++)
+					if (solve_state->collisions[r][c][i] == 0)
+						cell.candidates[candidate_idx++] = i;
+
+				into[n_cells] = cell;
+				n_cells++;
+			}
+		}
+	}
+
+	return n_cells;
+}
+
+bool reveal_naked_pairs(struct solve_state *solve_state) {
+	bool found_naked_pair_last_iter;
+	bool found_naked_pair_overall = false;
+
+	do {
+		found_naked_pair_last_iter = false;
+		
+		struct cell_with_2_candidates cells_with_2_candidates[81];
+		u32 n_cells = find_all_cells_with_2_candidates(solve_state, cells_with_2_candidates);
+		
+		for (u32 i = 0; i < n_cells; i++) {
+			struct cell_with_2_candidates cell1 = cells_with_2_candidates[i];
+
+			for (u32 j = i+1; j < n_cells; j++) {
+				
+				struct cell_with_2_candidates cell2 = cells_with_2_candidates[j];
+				
+				if (cell1.candidates[0] == cell2.candidates[0] && cell1.candidates[1] == cell2.candidates[1]) {
+					
+					u32 candidate1 = cell1.candidates[0];
+					u32 candidate2 = cell1.candidates[1];
+					if (cell1.row == cell2.row) {
+						u32 row_idx = cell1.row;
+						
+						for (u32 col_idx = 0; col_idx < 9; col_idx++) {
+							if (col_idx != cell1.col && col_idx != cell2.col) {
+								if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate1] == 0) {
+									solve_state->collisions[row_idx][col_idx][candidate1]++;
+									found_naked_pair_last_iter = true;
+								}
+								if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate2] == 0) {
+									solve_state->collisions[row_idx][col_idx][candidate2]++;
+									found_naked_pair_last_iter = true;
+								}
+							}
+						}
+						
+					} else if (cell1.col == cell2.col) {
+						u32 col_idx = cell1.col;
+	
+						for (u32 row_idx = 0; row_idx < 9; row_idx++) {
+							if (row_idx != cell1.row && row_idx != cell2.row) {
+								if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate1] == 0) {
+									solve_state->collisions[row_idx][col_idx][candidate1]++;
+									found_naked_pair_last_iter = true;
+								}
+								
+								if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate2] == 0) {
+									solve_state->collisions[row_idx][col_idx][candidate2]++;
+									found_naked_pair_last_iter = true;
+								}
+							}
+						}
+					}
+				}
+			}
+			
+		}
+
+		if (found_naked_pair_last_iter)
+			found_naked_pair_overall = true;
+
+	} while(found_naked_pair_last_iter);
+
+	return found_naked_pair_overall;
+}
+
 void initialize_solve_state_collisions(struct solve_state *solve_state) {
     // our initial state is that all the values are possible for each cell (aka 0 collisions)
     memset(solve_state->collisions, 0, 9 * 9 * 9 * sizeof(solve_state->collisions[0][0][0]));
@@ -585,7 +688,7 @@ void solve(const struct grid *initial_state, struct grid *into) {
     memcpy(solve_state.values, initial_state->values, sizeof(solve_state.values[0][0]) * 81);
     
     initialize_solve_state_collisions(&solve_state);
-    
+
     {
         bool revealed_at_least_one;
         
@@ -596,10 +699,15 @@ void solve(const struct grid *initial_state, struct grid *into) {
 
             bool found_hidden_singles = reveal_hidden_singles(&solve_state);
 
-            revealed_at_least_one |= found_lone_singles | found_hidden_singles;
+			bool found_naked_pairs = reveal_naked_pairs(&solve_state);
+
+            revealed_at_least_one |= found_lone_singles | found_hidden_singles | found_naked_pairs;
         } while (revealed_at_least_one);
     }
-    
+	
+	char *grid_str = solve_state_str(&solve_state);
+	//printf("grid state after all passes: \n%s\n", grid_str);
+
     bool success = recursive_solve(&solve_state, 0, 0);
 	assert(success);
 
@@ -790,7 +898,7 @@ int main(int argc, char *argv[]) {
 				printf("grid %"PRIu32": %s\n", grid_idx+1, error_str);
 				exit(1);
 			} else {
-				printf("%"PRIu32": looks good!\n", grid_idx);
+				//printf("%"PRIu32": looks good!\n", grid_idx);
 			}
 		}
 		end = clock();
