@@ -12,6 +12,7 @@ struct grid {
     u32 values[9][9];
 };
 
+// this is more than enough space for a grid string representation
 static char grid_str_buf[4096];
 
 char *make_grid_str(const struct grid *grid) {
@@ -31,12 +32,10 @@ char *make_grid_str(const struct grid *grid) {
                 
             } else {
                 s64 bytes_written = sprintf(to_print_to, "%" PRIu32 " ", grid->values[row_idx][col_idx]);
-                assert(bytes_written);
+                assert(bytes_written > 0);
                 
                 to_print_to += bytes_written;
             }
-            
-            
         }
         
         if (row_idx != 8) {
@@ -212,9 +211,7 @@ u32 box_col_lookup[9][9] = {
 // set is whether the value has been set or unset/erased
 void modify_related_cells_collisions(struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 value, bool set) {
     assert(solve_state);
-    assert(row_idx >= 0);
     assert(row_idx < 9);
-    assert(col_idx >= 0);
     assert(col_idx < 9);
     
     // if the value is being set, we want to add 1 to the collisions of related cells for that value
@@ -257,9 +254,7 @@ void modify_related_cells_collisions(struct solve_state *solve_state, u32 row_id
 // this function is used because there is bookeeping to do when setting a value
 void set_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 value) {
     assert(solve_state);
-    assert(row_idx >= 0);
     assert(row_idx < 9);
-    assert(col_idx >= 0);
     assert(col_idx < 9);
     assert(value >= 1);
     assert(value <= 9);
@@ -276,9 +271,7 @@ void set_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx, u32 va
 // this is used because there is bookeeping to do when a value is unset
 void unset_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx) {
     assert(solve_state);
-    assert(row_idx >= 0);
     assert(row_idx < 9);
-    assert(col_idx >= 0);
     assert(col_idx < 9);
     assert(solve_state->values[row_idx][col_idx] != 0);
     
@@ -292,8 +285,6 @@ void unset_value(struct solve_state *solve_state, u32 row_idx, u32 col_idx) {
 
 bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) {
     assert(solve_state);
-    assert(row_idx >= 0);
-    assert(col_idx >= 0);
     assert(col_idx < 9);
     
     // if we've gone off the end of the grid, that means we have solved it
@@ -411,7 +402,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
                 if (solve_state->values[row_idx][col_idx] != 0)
                     continue;
                 
-                u32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
+                s32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
                 for (u32 i = 0; i < 9; i++) {
                     if (cur_cell_collisions[i] == 0)
                         cells_possible[i]++;
@@ -446,7 +437,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
                 if (solve_state->values[row_idx][col_idx] != 0)
                     continue;
                 
-                u32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
+                s32 *cur_cell_collisions = solve_state->collisions[row_idx][col_idx];
                 for (u32 i = 0; i < 9; i++) {
                     if (cur_cell_collisions[i] == 0)
                         cells_possible[i]++;
@@ -487,7 +478,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
                         if (solve_state->values[row_idx][col_idx] != 0)
                             continue;
                         
-                        u32 *cell_collisions = solve_state->collisions[row_idx][col_idx];
+                        s32 *cell_collisions = solve_state->collisions[row_idx][col_idx];
                         
                         for (u32 i = 0; i < 9; i++) {
                             if (cell_collisions[i] == 0) {
@@ -610,7 +601,8 @@ void solve(const struct grid *initial_state, struct grid *into) {
     }
     
     bool success = recursive_solve(&solve_state, 0, 0);
-    
+	assert(success);
+
     memcpy(into->values, solve_state.values, 81 * sizeof(into->values[0][0]));
 }
 
@@ -644,20 +636,20 @@ void parse_ss_format(const char *contents, struct grid *into) {
                 }
                 if (c == '.') {
                     into->values[row_idx][col_idx] = 0;
-                } else {
+                } else if (c >= '0' && c <= '9') {
                     into->values[row_idx][col_idx] = c - '0';
-                }
+                } else {
+						fprintf(stderr, "error parsing .ss file: line %d char %d, expected digit but found %c\n", line_num+1, col_idx+1, c);
+				}
                 
                 col_idx++;
             }
-
-            // skip all whitespace
-			while (isspace(*next_char))
-				next_char++;
+			row_idx++;
         }
-        
-        // for newline char
-        next_char++;
+
+		// skip all whitespace
+		while (isspace(*next_char))
+			next_char++;
     }
 }
 
@@ -671,8 +663,9 @@ void load_grid_from_file(const char *file_name, struct grid *into) {
     
     
     char file_contents[4096];
-    fread(file_contents, 1, 4096, fp);
+    size_t n_read = fread(file_contents, 1, 4096, fp);
     fclose(fp);
+	file_contents[n_read] = 0;
     
     size_t file_name_len = strlen(file_name);
     
@@ -744,17 +737,22 @@ char *make_error_str(const struct is_solved_result solved) {
 		
 	switch (solved.err_type) {
 		case ROW_ERROR: {
-			sprintf(to_print_to, "row %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			sprintf(to_print_to, "row %"PRIu32" has value %"PRIu32" multiple times", solved.err_idx, solved.err_value);
 		}
 		break;
 		
 		case COL_ERROR: {
-			sprintf(to_print_to, "col %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			sprintf(to_print_to, "col %"PRIu32" has value %"PRIu32" multiple times", solved.err_idx, solved.err_value);
 		}
 		break;
 		
 		case BOX_ERROR: {
-			sprintf(to_print_to, "box %"PRIu32" has value %"PRIu32" multiple times\n", solved.err_idx, solved.err_value);
+			sprintf(to_print_to, "box %"PRIu32" has value %"PRIu32" multiple times", solved.err_idx, solved.err_value);
+		}
+		break;
+
+		case NOT_FILLED_ERROR: {
+			sprintf(to_print_to, "grid is not even fully filled out");
 		}
 		break;
 	}
@@ -791,6 +789,8 @@ int main(int argc, char *argv[]) {
 				char *error_str = make_error_str(solved_result);
 				printf("grid %"PRIu32": %s\n", grid_idx+1, error_str);
 				exit(1);
+			} else {
+				printf("%"PRIu32": looks good!\n", grid_idx);
 			}
 		}
 		end = clock();
