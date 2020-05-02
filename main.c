@@ -204,6 +204,18 @@ u32 box_col_lookup[9][9] = {
     {0, 0, 0, 3, 3, 3, 6, 6, 6}
 };
 
+u32 box_index_lookup[9][9] = {
+	{0, 0, 0, 1, 1, 1, 2, 2, 2},
+    {0, 0, 0, 1, 1, 1, 2, 2, 2},
+    {0, 0, 0, 1, 1, 1, 2, 2, 2},
+    {3, 3, 3, 4, 4, 4, 5, 5, 5},
+    {3, 3, 3, 4, 4, 4, 5, 5, 5},
+    {3, 3, 3, 4, 4, 4, 5, 5, 5},
+    {6, 6, 6, 7, 7, 7, 8, 8, 8},
+	{6, 6, 6, 7, 7, 7, 8, 8, 8},
+    {6, 6, 6, 7, 7, 7, 8, 8, 8},
+};
+
 // modifies solve_state->collisions for cells related to [row_idx][col_idx]
 // related cells are the ones in teh same row, column and box as [row_idx][col_idx]
 // value is the value that has been placed OR removed from cell [row_idx][col_idx]
@@ -310,7 +322,7 @@ bool recursive_solve(struct solve_state *solve_state, u32 row_idx, u32 col_idx) 
     
     for (u32 i = 0; i < 9; i++) {
         if (collisions[i] > 0)
-            // if we tried to place i + 1 at [row_idx][col_idx], there would be > 0 collisions, so skip it
+            // if we tried to place i + 1 at [row_idx][col_idx], there would be collisions, so skip it
             continue;
         
         u32 value = i + 1;
@@ -528,7 +540,7 @@ bool reveal_hidden_singles(struct solve_state *solve_state) {
 
 
 struct cell_with_2_candidates {
-	u32 row, col;
+	u32 row, col, box;
 	u32 candidates[2];
 };
 
@@ -548,6 +560,7 @@ u32 find_all_cells_with_2_candidates(const struct solve_state *solve_state, stru
 				struct cell_with_2_candidates cell;
 				cell.row = r;
 				cell.col = c;
+				cell.box = box_index_lookup[r][c];
 			
 				u32 candidate_idx = 0;
 				for (u32 i = 0; candidate_idx < 2; i++)
@@ -584,6 +597,7 @@ bool reveal_naked_pairs(struct solve_state *solve_state) {
 					
 					u32 candidate1 = cell1.candidates[0];
 					u32 candidate2 = cell1.candidates[1];
+
 					if (cell1.row == cell2.row) {
 						u32 row_idx = cell1.row;
 						
@@ -599,8 +613,9 @@ bool reveal_naked_pairs(struct solve_state *solve_state) {
 								}
 							}
 						}
+					}
 						
-					} else if (cell1.col == cell2.col) {
+					if (cell1.col == cell2.col) {
 						u32 col_idx = cell1.col;
 	
 						for (u32 row_idx = 0; row_idx < 9; row_idx++) {
@@ -613,6 +628,30 @@ bool reveal_naked_pairs(struct solve_state *solve_state) {
 								if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate2] == 0) {
 									solve_state->collisions[row_idx][col_idx][candidate2]++;
 									found_naked_pair_last_iter = true;
+								}
+							}
+						}
+					}
+
+					if (cell1.box == cell2.box) {
+						u32 box_idx = cell1.box;
+
+						u32 box_row_start = box_row_lookup[cell1.row][cell1.col];
+						u32 box_row_end = box_row_start + 3;
+						u32 box_col_start = box_col_lookup[cell1.row][cell1.col];
+						u32 box_col_end = box_col_start + 3;
+						
+						for (u32 row_idx = box_row_start; row_idx < box_row_end; row_idx++) {
+							for (u32 col_idx = box_col_start; col_idx < box_col_end; col_idx++) {
+								if ((row_idx != cell1.row || col_idx != cell1.col) && (row_idx != cell2.row || col_idx != cell2.col)) {
+									if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate1] == 0) {
+										solve_state->collisions[row_idx][col_idx][candidate1]++;
+										found_naked_pair_last_iter = true;
+									}
+									if (solve_state->values[row_idx][col_idx] == 0 && solve_state->collisions[row_idx][col_idx][candidate2] == 0) {
+										solve_state->collisions[row_idx][col_idx][candidate2]++;
+										found_naked_pair_last_iter = true;
+									}
 								}
 							}
 						}
