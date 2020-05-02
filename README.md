@@ -7,6 +7,7 @@ current solving techniques implemented:
 
 1. lone singles
 2. hidden singles
+4. naked pairs
 3. backtracking
 
 initial state is provided via a file that is the 1st arg to the program (.ss file format)
